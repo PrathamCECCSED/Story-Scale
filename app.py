@@ -1,4 +1,3 @@
-
 import streamlit as st
 import joblib
 
@@ -9,7 +8,6 @@ st.set_page_config(page_title="Story Scale", page_icon="📈", layout="wide")
 artifact = joblib.load("storypoint_artifact.joblib")
 model = artifact["model"]
 vectorizer = artifact["vectorizer"]
-  # <-- same file in your repo
 
 # ---------- CSS THEME (DARK) ----------
 st.markdown("""
@@ -58,14 +56,13 @@ st.markdown("<div class='sub'>AI based User Story Effort Estimator for Agile Tea
 story = st.text_area("User Story", placeholder="ex: As a user, I should be able to login via Google OAuth so I can sign in faster")
 
 if st.button("Estimate Effort 🚀"):
-    if story.strip()=="":
+    if story.strip() == "":
         st.warning("Please enter a story first.")
     else:
-       vec = vectorizer.transform([story])
-       pred = model.predict(vec)[0]
+        vec = vectorizer.transform([story])
+        pred = model.predict(vec)[0]
 
-
-        # -------- Result Cards --------
+        # Result Card
         st.markdown("<div class='card'> <div class='metric'>"+ str(pred) +"</div><div class='metric-label'>Predicted Story Points</div></div>", unsafe_allow_html=True)
 
         with st.expander("Team Roles Required"):
@@ -86,7 +83,7 @@ if st.button("Estimate Effort 🚀"):
 **Backend**  
 1) Model + DB schema  
 2) API endpoint  
-3) integration + Auth  
+3) Integration + Auth  
 
 **Frontend**  
 1) UI Component  
@@ -94,9 +91,9 @@ if st.button("Estimate Effort 🚀"):
 3) Validation + Testing  
 
 **QA**  
-1) test plan  
-2) automation  
-3) regression  
+1) Test plan  
+2) Automation  
+3) Regression  
 """)
 
         with st.expander("Scrum Master Final Effort"):
@@ -104,4 +101,5 @@ if st.button("Estimate Effort 🚀"):
 
 # footer
 st.markdown("<br><br><center style='color:#666'>Made with 💛 by Story Scale AI</center>", unsafe_allow_html=True)
+
 
