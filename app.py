@@ -4,6 +4,7 @@ from statistics import mean
 import pandas as pd
 import io
 import math
+import matplotlib.pyplot as plt
 
 # ---------- CONFIG ----------
 st.set_page_config(page_title="Story Scale", page_icon="📈", layout="wide")
@@ -34,6 +35,17 @@ st.markdown("""
       .task-feature { color:#A5B4FC; padding-left:10px; }
       .task-task { color:#7DD3FC; padding-left:30px; }
       .task-sub { color:#86EFAC; padding-left:50px; }
+      .progress-bar {
+          width: 100%;
+          background-color: #1E293B;
+          border-radius: 12px;
+          margin-top: 6px;
+      }
+      .progress {
+          height: 12px;
+          border-radius: 12px;
+          background: linear-gradient(90deg, #22C55E, #16A34A);
+      }
     </style>
 """, unsafe_allow_html=True)
 
@@ -122,12 +134,18 @@ def factual_reasons(sp, roles, category):
 
 def sprint_weeks(sp: int, velocity: int):
     weeks = math.ceil((sp / velocity) * 2)
-    if weeks < 1:
-        weeks = 1
-    return f"{weeks} week(s)"
+    return max(1, weeks)
+
+def sprint_risk(sp, velocity):
+    ratio = sp / velocity
+    if ratio > 1:
+        return "🚨 High Risk — Story exceeds sprint capacity", "error"
+    elif ratio > 0.75:
+        return "⚠️ Medium Risk — Story fills >75% of sprint capacity", "warning"
+    else:
+        return "✅ Low Risk — Story fits well within sprint", "success"
 
 def generate_backlog(cat: str):
-    # Generates a professional backlog breakdown
     if cat == 'payment':
         return [
             ("Epic", "Online Payments Integration"),
@@ -169,6 +187,8 @@ def predict_and_explain(text: str, team_velocity: int = 20):
     factual = factual_reasons(rounded_sp, rules["roles"], cat)
     backlog = generate_backlog(cat)
     duration = sprint_weeks(rounded_sp, team_velocity)
+    risk_msg, risk_level = sprint_risk(rounded_sp, team_velocity)
+    capacity_used = round((rounded_sp / team_velocity) * 100, 1)
     return {
         "predicted_raw": raw_pred,
         "story_points": rounded_sp,
@@ -178,9 +198,12 @@ def predict_and_explain(text: str, team_velocity: int = 20):
         "role_inner_steps": ROLE_INNER_STEPS,
         "recommended_tasks": rules["tasks"],
         "sprint_weeks": duration,
-        "sprint_suggestion": f"Expected to complete in {duration} (velocity={team_velocity})",
+        "sprint_suggestion": f"Expected to complete in {duration} week(s) (velocity={team_velocity})",
         "backlog": backlog,
-        "category": cat
+        "category": cat,
+        "risk_msg": risk_msg,
+        "risk_level": risk_level,
+        "capacity_used": min(capacity_used, 100)
     }
 
 def finalize_by_team_votes(ai_sp: int, team_votes: dict):
@@ -216,15 +239,13 @@ if "votes" not in st.session_state:
     st.session_state.votes = ""
 
 # ---------- UI ----------
-# ---------- UI ----------
 st.markdown("<h1 style='color:#E6EEF3'>📈 Story Scale</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color:#9FA6B2'>AI Effort Estimator — Enhanced with Backlog, Facts, and Sprint Duration</p>", unsafe_allow_html=True)
+st.markdown("<p style='color:#9FA6B2'>AI Effort Estimator — Enhanced with Backlog, Facts, Risk, and Capacity Visualization</p>", unsafe_allow_html=True)
 
 story = st.text_area("Paste user story (Agile style)", height=140,
                      placeholder="As a user, I want to login using Google OAuth so I can sign in faster")
 team_velocity = st.number_input("Team velocity (Story Points per Sprint)", min_value=5, max_value=200, value=20)
 
-# -- Predict only on button press --
 if st.button("Estimate Effort 🚀"):
     if story.strip():
         st.session_state.cache = predict_and_explain(story, team_velocity)
@@ -233,31 +254,44 @@ if st.button("Estimate Effort 🚀"):
     else:
         st.warning("Please enter a user story first.")
 
-# -- If cached result exists --
 if "cache" in st.session_state and st.session_state.cache:
     out = st.session_state.cache
     
-    # --- Dynamically recalculate sprint duration if velocity changes ---
+    # --- Dynamic Sprint update ---
     if team_velocity != st.session_state.get("last_velocity", team_velocity):
         out["sprint_weeks"] = sprint_weeks(out["story_points"], team_velocity)
-        out["sprint_suggestion"] = f"Expected to complete in {out['sprint_weeks']} (velocity={team_velocity})"
+        out["sprint_suggestion"] = f"Expected to complete in {out['sprint_weeks']} week(s) (velocity={team_velocity})"
         st.session_state.last_velocity = team_velocity
 
-    # --- Display cards ---
+    # --- Top Cards ---
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f"<div class='card'><div class='card-title'>🎯 Estimated Effort</div><div class='big-metric'>{out['story_points']}</div><div class='small'>Raw: {out['predicted_raw']:.3f}</div></div>", unsafe_allow_html=True)
     with c2:
         st.markdown(f"<div class='card'><div class='card-title'>🧩 Complexity</div><b>{out['complexity']}</b></div>", unsafe_allow_html=True)
     with c3:
-        st.markdown(f"<div class='card'><div class='card-title'>🗓 Sprint Duration</div><b>{out['sprint_weeks']}</b><div class='small'>Auto-adjusts with velocity ({team_velocity} SP/sprint)</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>🗓 Sprint Duration</div><b>{out['sprint_weeks']} week(s)</b><div class='small'>Auto-adjusts with velocity ({team_velocity} SP)</div></div>", unsafe_allow_html=True)
+
+    # --- Risk Predictor ---
+    if out["risk_level"] == "error":
+        st.error(out["risk_msg"])
+    elif out["risk_level"] == "warning":
+        st.warning(out["risk_msg"])
+    else:
+        st.success(out["risk_msg"])
+
+    # --- Capacity Bar ---
+    st.markdown("<div class='card'><div class='card-title'>📊 Sprint Capacity Usage</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='progress-bar'><div class='progress' style='width:{out['capacity_used']}%'></div></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='small'>This story uses {out['capacity_used']}% of your sprint capacity.</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # --- Reasons ---
     st.markdown("<div class='card'><div class='card-title'>🧠 Reasons for Effort</div>", unsafe_allow_html=True)
     for r in out['reasons']: st.markdown(f"- {r}")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- Backlog Breakdown ---
+    # --- Backlog ---
     st.markdown("<div class='card'><div class='card-title'>🗂 Professional Backlog Breakdown</div>", unsafe_allow_html=True)
     st.markdown("<table>", unsafe_allow_html=True)
     for level, text in out["backlog"]:
@@ -290,11 +324,19 @@ if "cache" in st.session_state and st.session_state.cache:
         final = finalize_by_team_votes(out['story_points'], votes)
         st.session_state.final = final
 
+    # --- AI vs Team Chart ---
     if "final" in st.session_state:
         final = st.session_state.final
+        st.markdown("<div class='card'><div class='card-title'>📈 AI vs Team Comparison</div>", unsafe_allow_html=True)
+        fig, ax = plt.subplots(figsize=(3,2))
+        labels = ["AI Estimate", "Team Avg", "Final"]
+        values = [final["ai_suggestion"], final.get("team_avg", 0), final["final_story_points"]]
+        ax.bar(labels, values, color=["#60A5FA","#FBBF24","#22C55E"])
+        ax.set_ylabel("Story Points")
+        ax.set_ylim(0, max(values)+5)
+        st.pyplot(fig)
         st.success(f"✅ Final Effort: {final['final_story_points']} SP")
         st.caption(final['rationale'])
 
 # footer
 st.markdown("<br><br><center style='color:#9FA6B2'>Made with 💛 by Story Scale — Enhanced Agile AI</center>", unsafe_allow_html=True)
-
