@@ -216,6 +216,7 @@ if "votes" not in st.session_state:
     st.session_state.votes = ""
 
 # ---------- UI ----------
+# ---------- UI ----------
 st.markdown("<h1 style='color:#E6EEF3'>📈 Story Scale</h1>", unsafe_allow_html=True)
 st.markdown("<p style='color:#9FA6B2'>AI Effort Estimator — Enhanced with Backlog, Facts, and Sprint Duration</p>", unsafe_allow_html=True)
 
@@ -223,29 +224,40 @@ story = st.text_area("Paste user story (Agile style)", height=140,
                      placeholder="As a user, I want to login using Google OAuth so I can sign in faster")
 team_velocity = st.number_input("Team velocity (Story Points per Sprint)", min_value=5, max_value=200, value=20)
 
+# -- Predict only on button press --
 if st.button("Estimate Effort 🚀"):
     if story.strip():
         st.session_state.cache = predict_and_explain(story, team_velocity)
+        st.session_state.story = story
+        st.session_state.last_velocity = team_velocity
     else:
         st.warning("Please enter a user story first.")
 
-if st.session_state.cache:
+# -- If cached result exists --
+if "cache" in st.session_state and st.session_state.cache:
     out = st.session_state.cache
-    # --- Top cards
+    
+    # --- Dynamically recalculate sprint duration if velocity changes ---
+    if team_velocity != st.session_state.get("last_velocity", team_velocity):
+        out["sprint_weeks"] = sprint_weeks(out["story_points"], team_velocity)
+        out["sprint_suggestion"] = f"Expected to complete in {out['sprint_weeks']} (velocity={team_velocity})"
+        st.session_state.last_velocity = team_velocity
+
+    # --- Display cards ---
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown(f"<div class='card'><div class='card-title'>🎯 Estimated Effort</div><div class='big-metric'>{out['story_points']}</div><div class='small'>Raw: {out['predicted_raw']:.3f}</div></div>", unsafe_allow_html=True)
     with c2:
         st.markdown(f"<div class='card'><div class='card-title'>🧩 Complexity</div><b>{out['complexity']}</b></div>", unsafe_allow_html=True)
     with c3:
-        st.markdown(f"<div class='card'><div class='card-title'>🗓 Sprint Duration</div><b>{out['sprint_weeks']}</b><div class='small'>Based on team velocity ({team_velocity} SP/sprint)</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>🗓 Sprint Duration</div><b>{out['sprint_weeks']}</b><div class='small'>Auto-adjusts with velocity ({team_velocity} SP/sprint)</div></div>", unsafe_allow_html=True)
 
-    # --- Reasons
+    # --- Reasons ---
     st.markdown("<div class='card'><div class='card-title'>🧠 Reasons for Effort</div>", unsafe_allow_html=True)
     for r in out['reasons']: st.markdown(f"- {r}")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- Backlog Breakdown
+    # --- Backlog Breakdown ---
     st.markdown("<div class='card'><div class='card-title'>🗂 Professional Backlog Breakdown</div>", unsafe_allow_html=True)
     st.markdown("<table>", unsafe_allow_html=True)
     for level, text in out["backlog"]:
@@ -253,7 +265,7 @@ if st.session_state.cache:
         st.markdown(f"<tr><td class='{css_class}'>• {text}</td></tr>", unsafe_allow_html=True)
     st.markdown("</table></div>", unsafe_allow_html=True)
 
-    # --- Roles and Steps (unchanged)
+    # --- Roles ---
     st.markdown("<div class='card'><div class='card-title'>👥 Roles & Inner Steps</div>", unsafe_allow_html=True)
     for role in out['roles']:
         st.markdown(f"**{role}**")
@@ -261,7 +273,7 @@ if st.session_state.cache:
         st.markdown("")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- Team Voting
+    # --- Team Voting ---
     st.markdown("<div class='card'><div class='card-title'>🧮 Team Voting (Planning Poker)</div>", unsafe_allow_html=True)
     votes_raw = st.text_input("Team votes (e.g. FE:8,BE:13,QA:5)", value=st.session_state.votes)
     if st.button("Finalize by Scrum Master 🔨"):
@@ -285,3 +297,4 @@ if st.session_state.cache:
 
 # footer
 st.markdown("<br><br><center style='color:#9FA6B2'>Made with 💛 by Story Scale — Enhanced Agile AI</center>", unsafe_allow_html=True)
+
