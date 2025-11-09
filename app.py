@@ -26,65 +26,19 @@ body { background-color: #0E1117; color: #E6EEF3; font-family: 'Inter', sans-ser
 .card-title { font-weight:700; font-size:18px; color:#E6EEF3; margin-bottom:8px; }
 .big-metric { font-size:42px; font-weight:800; color:#7EF2A7; }
 .subtle { color:#9FA6B2; font-size:13px; }
-.progress-bar {
-    height: 10px; border-radius:8px; margin-top:8px;
-    background: linear-gradient(90deg, #22C55E, #16A34A);
-}
-h1 { color:#E6EEF3; font-weight:800; margin-bottom:0; }
-.highlight { color:#4ADE80; font-weight:700; }
 .reason { margin-left:6px; color:#D8E6F0; }
 .badge { background:#1F2937; border-radius:8px; padding:4px 10px; color:#93C5FD; margin-right:6px; }
+.task-table { width:100%; border-collapse: collapse; }
+.task-table td { padding:6px 4px; vertical-align: top; }
+.task-epic { color:#FACC15; font-weight:700; }
+.task-feature { color:#A5B4FC; padding-left:10px; }
+.task-task { color:#7DD3FC; padding-left:30px; }
+.task-sub { color:#86EFAC; padding-left:50px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------- HELPERS ----------
 FIB = [1, 2, 3, 5, 8, 13, 21, 40]
-
-ROLE_RULES = {
-    'payment': {
-        'roles': ['Backend Developer','Frontend Developer','QA Engineer','Security/DevOps'],
-        'reasons': ['Integration with 3rd party payment APIs','Complex data validation & security compliance','Transaction logging & audit trail','Error handling & retries'],
-        'tasks': ['Setup payment gateway','Implement payment routes','UI payment flow','Automate payment tests']
-    },
-    'auth': {
-        'roles': ['Frontend Developer','Backend Developer','QA Engineer'],
-        'reasons': ['User authentication flow','Session & token management','OAuth complexity','Security testing'],
-        'tasks': ['Create auth endpoints','Design login UI','Token refresh handling','Write test cases']
-    },
-    'analytics': {
-        'roles': ['Backend Developer','Data Engineer','Frontend Developer','QA Engineer'],
-        'reasons': ['Data aggregation & transformation','Chart rendering complexity','Filter and query optimization'],
-        'tasks': ['Create analytics API','Design DB aggregates','Implement charts','Add analytics tests']
-    },
-    'default': {
-        'roles': ['Frontend Developer','Backend Developer','QA Engineer'],
-        'reasons': ['General feature complexity','Integration and testing effort'],
-        'tasks': ['Define API contract','Implement UI','Write unit tests']
-    }
-}
-
-ROLE_INNER_STEPS = {
-    'Frontend Developer': [
-        "Design and implement responsive UI components",
-        "Integrate with backend APIs and manage state",
-        "Add validation and error handling"
-    ],
-    'Backend Developer': [
-        "Design database models and schema",
-        "Implement business logic and APIs",
-        "Integrate with external services if needed"
-    ],
-    'QA Engineer': [
-        "Design manual test cases",
-        "Implement automation suite",
-        "Perform regression & performance testing"
-    ],
-    'Security/DevOps': [
-        "Review API security",
-        "Setup CI/CD pipelines",
-        "Monitor and deploy securely"
-    ]
-}
 
 def round_to_fib(x: float) -> int:
     return int(min(FIB, key=lambda v: abs(v - x)))
@@ -95,46 +49,98 @@ def get_complexity(sp: int) -> str:
     return "High"
 
 def sprint_weeks(sp: int, velocity: int):
-    # assume 1 sprint = 2 weeks
-    weeks = math.ceil(sp / velocity * 2)
+    weeks = math.ceil((sp / velocity) * 2)
+    if weeks < 1:
+        weeks = 1
     return f"{weeks} week(s)"
+
+def factual_reasoning(story_points: int, roles: list, category: str):
+    facts = []
+    if story_points > 13:
+        facts.append("High story points suggest multiple integrations or major refactor.")
+    elif story_points <= 3:
+        facts.append("Low story points — likely UI enhancement or small bug fix.")
+    else:
+        facts.append("Moderate scope — involves 2–3 major dev roles.")
+    facts.append(f"Involves {len(roles)} team roles ({', '.join(roles[:3])}...).")
+    facts.append(f"Category: {category.title()} module, estimated effort scales with backend dependencies.")
+    return facts
+
+def generate_backlog(category: str):
+    backlog = []
+    if category == 'payment':
+        backlog = [
+            ["Epic", "Online Payments Integration"],
+            ["Feature", "Integrate Razorpay API"],
+            ["Task", "Setup payment gateway keys"],
+            ["Subtask", "Add transaction logs and error handling"],
+            ["Feature", "Implement payment confirmation UI"],
+            ["Task", "Design payment success & failure screens"]
+        ]
+    elif category == 'auth':
+        backlog = [
+            ["Epic", "User Authentication"],
+            ["Feature", "OAuth 2.0 Login Implementation"],
+            ["Task", "Setup Google & Email Auth"],
+            ["Subtask", "Store and refresh tokens securely"],
+            ["Feature", "Password Reset Flow"],
+            ["Task", "Create email OTP verification module"]
+        ]
+    elif category == 'analytics':
+        backlog = [
+            ["Epic", "Analytics Dashboard"],
+            ["Feature", "Design Data Visualization UI"],
+            ["Task", "Integrate Chart.js for visualization"],
+            ["Subtask", "Implement filtering & export functionality"],
+            ["Feature", "Backend Aggregation API"],
+            ["Task", "Setup data warehouse queries"]
+        ]
+    else:
+        backlog = [
+            ["Epic", "Core Product Enhancement"],
+            ["Feature", "Add new modular feature"],
+            ["Task", "Implement API routes & UI"],
+            ["Subtask", "Write test cases & documentation"]
+        ]
+    return backlog
 
 def predict_and_explain(text: str, team_velocity: int = 20):
     vec = vectorizer.transform([text])
     raw_pred = float(model.predict(vec)[0])
     rounded_sp = round_to_fib(raw_pred)
     complexity = get_complexity(rounded_sp)
-    cat = 'default'
-    for k in ROLE_RULES.keys():
-        if k in text.lower():
-            cat = k
-    rules = ROLE_RULES[cat]
-    sprint_time = sprint_weeks(rounded_sp, team_velocity)
+    category = "default"
+    if any(k in text.lower() for k in ["payment", "upi", "checkout"]): category = "payment"
+    elif any(k in text.lower() for k in ["login", "auth", "password", "oauth"]): category = "auth"
+    elif any(k in text.lower() for k in ["dashboard", "analytics", "report"]): category = "analytics"
+    
+    roles = ["Frontend Developer", "Backend Developer", "QA Engineer"]
+    if category == "analytics": roles.append("Data Engineer")
+    if category == "payment": roles.append("Security/DevOps")
+
+    reasons = factual_reasoning(rounded_sp, roles, category)
+    backlog = generate_backlog(category)
+    sprint_duration = sprint_weeks(rounded_sp, team_velocity)
+
     return {
         "predicted_raw": raw_pred,
         "story_points": rounded_sp,
         "complexity": complexity,
-        "reasons": rules['reasons'],
-        "roles": rules['roles'],
-        "role_inner_steps": ROLE_INNER_STEPS,
-        "recommended_tasks": rules['tasks'],
-        "sprint_weeks": sprint_time,
-        "category": cat
+        "reasons": reasons,
+        "roles": roles,
+        "backlog": backlog,
+        "sprint_duration": sprint_duration,
+        "category": category
     }
 
 def finalize_by_team_votes(ai_sp: int, team_votes: dict):
-    votes = list(team_votes.values())
-    if not votes:
-        return {"final": ai_sp, "rationale": "No team votes provided — AI suggestion used."}
-    avg = mean(votes)
+    if not team_votes:
+        return {"final": ai_sp, "rationale": "No team votes provided — AI estimate retained."}
+    avg = mean(team_votes.values())
     rounded = round_to_fib(avg)
     if abs(rounded - ai_sp) <= 2:
-        final = ai_sp
-        rationale = "Consensus aligns with AI — accepted AI estimate."
-    else:
-        final = rounded
-        rationale = "Scrum Master accepted team consensus."
-    return {"final": final, "rationale": rationale}
+        return {"final": ai_sp, "rationale": "Consensus close to AI — accepted AI estimate."}
+    return {"final": rounded, "rationale": "Scrum Master accepted team consensus."}
 
 # ---------- SESSION ----------
 if "cache" not in st.session_state:
@@ -144,71 +150,73 @@ if "votes" not in st.session_state:
 
 # ---------- UI ----------
 st.markdown("<h1>📈 Story Scale</h1>", unsafe_allow_html=True)
-st.markdown("<p style='color:#9FA6B2'>AI-driven Agile Estimation with Transparency, Reasoning, and Scrum Insights</p>", unsafe_allow_html=True)
+st.markdown("<p style='color:#9FA6B2'>AI-based Agile Effort Estimator with Backlog Breakdown & Sprint Logic</p>", unsafe_allow_html=True)
 
 story = st.text_area("✍️ Enter User Story", height=140, placeholder="As a user, I want to login using Google OAuth so I can sign in faster.")
-team_velocity = st.number_input("🏃 Team Velocity (SP per Sprint)", min_value=5, max_value=200, value=20)
+team_velocity = st.number_input("🏃 Team Velocity (Story Points per Sprint)", min_value=5, max_value=200, value=20)
 
 if st.button("Estimate Effort 🚀"):
     if story.strip():
         st.session_state.cache = predict_and_explain(story, team_velocity)
     else:
-        st.warning("Please enter a user story.")
+        st.warning("Please enter a story first.")
 
 if st.session_state.cache:
     out = st.session_state.cache
 
-    # --- Core metrics row ---
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.markdown(f"<div class='card'><div class='card-title'>🎯 Effort Estimate</div><div class='big-metric'>{out['story_points']}</div><div class='subtle'>Raw model: {out['predicted_raw']:.3f}</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>🎯 Effort Estimate</div><div class='big-metric'>{out['story_points']}</div><div class='subtle'>Raw: {out['predicted_raw']:.2f}</div></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"<div class='card'><div class='card-title'>🧩 Complexity</div><b>{out['complexity']}</b><div class='progress-bar'></div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>🧩 Complexity</div><b>{out['complexity']}</b></div>", unsafe_allow_html=True)
     with c3:
-        st.markdown(f"<div class='card'><div class='card-title'>🗓 Sprint Duration</div><b>{out['sprint_weeks']}</b><div class='subtle'>Based on team velocity</div></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>🗓 Sprint Duration</div><b>{out['sprint_duration']}</b><div class='subtle'>Velocity impact applied</div></div>", unsafe_allow_html=True)
     with c4:
-        st.markdown(f"<div class='card'><div class='card-title'>📊 Category</div><b>{out['category'].capitalize()}</b></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='card'><div class='card-title'>📊 Category</div><b>{out['category'].title()}</b></div>", unsafe_allow_html=True)
 
-    # --- Reason for Effort ---
-    st.markdown("<div class='card'><div class='card-title'>🧠 Reasons for Effort</div>", unsafe_allow_html=True)
-    for reason in out['reasons']:
-        st.markdown(f"- {reason}")
+    # ----- Reason for Effort -----
+    st.markdown("<div class='card'><div class='card-title'>🧠 Reasons for Effort (Facts)</div>", unsafe_allow_html=True)
+    for r in out['reasons']:
+        st.markdown(f"- {r}")
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- Backlogs / Tasks ---
-    st.markdown("<div class='card'><div class='card-title'>🗂 Recommended Backlog Tasks</div>", unsafe_allow_html=True)
-    for i, task in enumerate(out['recommended_tasks'], 1):
-        st.markdown(f"{i}. {task}")
-    st.markdown("</div>", unsafe_allow_html=True)
+    # ----- Professional Backlog Breakdown -----
+    st.markdown("<div class='card'><div class='card-title'>🗂 Professional Backlog Breakdown</div>", unsafe_allow_html=True)
+    st.markdown("<table class='task-table'>", unsafe_allow_html=True)
+    for level, text in out["backlog"]:
+        if level == "Epic":
+            st.markdown(f"<tr><td class='task-epic'>🧱 {text}</td></tr>", unsafe_allow_html=True)
+        elif level == "Feature":
+            st.markdown(f"<tr><td class='task-feature'>📘 {text}</td></tr>", unsafe_allow_html=True)
+        elif level == "Task":
+            st.markdown(f"<tr><td class='task-task'>🛠️ {text}</td></tr>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"<tr><td class='task-sub'>🔹 {text}</td></tr>", unsafe_allow_html=True)
+    st.markdown("</table></div>", unsafe_allow_html=True)
 
-    # --- Roles & Steps ---
-    st.markdown("<div class='card'><div class='card-title'>👥 Roles & Inner Steps</div>", unsafe_allow_html=True)
-    for role in out['roles']:
-        st.markdown(f"<div class='badge'>{role}</div>", unsafe_allow_html=True)
-        for step in out['role_inner_steps'].get(role, []):
-            st.markdown(f"- {step}")
-        st.markdown("")
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # --- Team Voting ---
+    # ----- Team Voting -----
     st.markdown("<div class='card'><div class='card-title'>🧮 Team Voting (Planning Poker)</div><div class='subtle'>Enter votes like FE:8,BE:13,QA:5</div>", unsafe_allow_html=True)
     votes_raw = st.text_input("Team votes", value=st.session_state.votes)
     if st.button("Finalize by Scrum Master 🔨"):
         st.session_state.votes = votes_raw
         votes = {}
-        for v in votes_raw.split(","):
-            if ":" in v:
-                k, val = v.split(":")
-                votes[k.strip()] = int(val.strip())
+        try:
+            for part in votes_raw.split(","):
+                if ":" in part:
+                    k, v = part.split(":")
+                    votes[k.strip()] = int(v.strip())
+        except:
+            st.error("Invalid format! Use FE:8,BE:13")
+            votes = {}
         final = finalize_by_team_votes(out['story_points'], votes)
         st.session_state.final = final
 
     if "final" in st.session_state:
         final = st.session_state.final
         st.markdown("<div class='card'><div class='card-title'>🔒 Scrum Master Final Decision</div>", unsafe_allow_html=True)
-        st.success(f"Final Effort: **{final['final']} SP**")
+        st.success(f"✅ Final Effort: {final['final']} SP")
         st.caption(final["rationale"])
         st.markdown("</div>", unsafe_allow_html=True)
 
-# Footer
 st.markdown("<br><br><center style='color:#9FA6B2'>Made with 💛 by Story Scale — Advanced Scrum AI Estimator</center>", unsafe_allow_html=True)
+
