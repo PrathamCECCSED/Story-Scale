@@ -5,9 +5,9 @@ import joblib
 st.set_page_config(page_title="Story Scale", page_icon="📈", layout="wide")
 
 # ---------- LOAD MODEL ----------
-artifact = joblib.load("storypoint_artifact.joblib")
-model = artifact["model"]
-vectorizer = artifact["vectorizer"]
+
+model = joblib.load("model.joblib")
+vectorizer = joblib.load("vectorizer.joblib")
 
 # ---------- CSS THEME (DARK) ----------
 st.markdown("""
